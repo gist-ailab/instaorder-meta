@@ -402,7 +402,7 @@ class Tester(object):
     def eval_occ_order(self):
         recall_list, precision_list, f1_list = [], [], []
         for i in tqdm(range(self.data_length), total=self.data_length):
-            modal, category, bboxes, amodal_gt, image_fn = self.data_reader.get_image_instances(i, with_gt=True)
+            modal, category, bboxes, amodal_gt, image_fn, gt_occ_order = self.data_reader.get_image_instances(i, with_gt=True)
             if self.args.data['use_category']:
                 modal = modal * category[:, None, None]
 
@@ -410,12 +410,12 @@ class Tester(object):
             image = np.array(Image.open(os.path.join(self.data_root, image_fn)).convert('RGB'))
             bboxes = self.expand_bbox(bboxes)
 
-            # gt order
-            if self.dataset == 'InstaOrder':
-                gt_occ_order = self.data_reader.get_gt_ordering(i, 'occlusion', self.args.data['remove_occ_bidirec'])
-            else:
-                gt_occ_order = self.data_reader.get_gt_ordering(i) if self.gt_ordering == "ann" \
-                    else infer.infer_gt_order(modal, amodal_gt)
+            # # gt order
+            # if self.dataset == 'InstaOrder':
+            #     gt_occ_order = self.data_reader.get_gt_ordering(i, 'occlusion', self.args.data['remove_occ_bidirec'])
+            # else:
+            #     gt_occ_order = self.data_reader.get_gt_ordering(i) if self.gt_ordering == "ann" \
+            #         else infer.infer_gt_order(modal, amodal_gt)
 
             # infer order
             if self.args.order_method == 'area':

@@ -1,9 +1,9 @@
 import os
 import logging
-import numpy as np
-
 import torch
 from torch.nn import init
+import numpy as np
+
 
 
 def disp_to_depth(disp, min_depth, max_depth):

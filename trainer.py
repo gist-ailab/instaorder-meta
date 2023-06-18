@@ -153,7 +153,8 @@ class Trainer(object):
         if self.rank == 0:
             self.num_params = sum(p.numel() for p in self.model.model.parameters() if p.requires_grad)
             self.logger.info(f"#parameters: {self.num_params}")
-            self.wb_logger.log({'#parameters': self.num_params}, step=0)
+            if self.wb_logger is not None:
+                self.wb_logger.log({'#parameters': self.num_params}, step=0)
 
         for i, inputs in enumerate(self.train_loader):
 

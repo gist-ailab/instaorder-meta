@@ -15,11 +15,12 @@ import time
 import torch
 import torchvision.transforms as transforms
 import csv
-
+# import sys
+# # sys.setrecursionlimit(8 * sys.getrecursionlimit())
 
 def read_KINS(ann):
-    modal = maskUtils.decode(ann['inmodal_seg'])  # HW, uint8, {0, 1}
-    bbox = ann['inmodal_bbox']  # luwh
+    modal = maskUtils.decode(ann['visible_mask'])  # HW, uint8, {0, 1}
+    bbox = ann['visible_bbox']  # luwh
     category = ann['category_id']
     if 'score' in ann.keys():
         score = ann['score']
@@ -29,21 +30,13 @@ def read_KINS(ann):
 
 
 def read_LVIS(ann, h, w):
-    segm = ann["segmentation"]
-    if isinstance(segm, list):
-        # polygon -- a single object might consist of multiple parts
-        # we merge all parts into one mask rle code
-        rles = maskUtils.frPyObjects(segm, h, w)
-        rle = maskUtils.merge(rles)
-    elif isinstance(segm["counts"], list):
-        # uncompressed RLE
-        rle = maskUtils.frPyObjects(segm, h, w)
-    else:
-        # rle
-        rle = ann["segmentation"]
-    bbox = ann['bbox']  # luwh
+
+    visible_rle = ann['visible_mask']
+    amodal_rle = ann['segmentation']
+    bbox = ann['visible_bbox']
     category = ann['category_id']
-    return maskUtils.decode(rle), bbox, category
+    
+    return maskUtils.decode(visible_rle), bbox, int(category), maskUtils.decode(amodal_rle)
 
 
 def read_COCOA(ann, h, w):
@@ -258,6 +251,7 @@ class COCOADataset(object):
 
     def get_image_instances(self, idx, with_id=False, with_gt=False, with_anns=False, ignore_stuff=False):
         ann_info = self.annot_info[idx]
+
         img_info = self.images_info[idx]
         image_fn = img_info['file_name']
         image_id = img_info['id']
@@ -294,154 +288,145 @@ class COCOADataset(object):
 class InstaOrderDataset(object):
     def __init__(self, annot_fn):
         data = cvb.load(annot_fn)
-        # self.images_info = data['images']
+        self.images_info = data['images']
         self.annot_info = data['annotations']
-        data_types = ['train2017', 'val2017']
-
-        for dtype in data_types:
-            if dtype in annot_fn:
-                data_type = dtype
-
-        coco_annot_fn = annot_fn.replace(f"{annot_fn.split('/')[-1]}", f"instances_{data_type}.json")
-        self.coco = COCO(coco_annot_fn)
+        self.annot_fn = annot_fn
+        
+        self.coco = COCO(annot_fn)
+        print('## ', annot_fn, self.get_image_length())
 
     def get_image_length(self):
-        return len(self.annot_info)
+        return len(self.images_info)
 
-    def get_instance_length(self):
-        self.indexing = []
-        for img_id, ann in enumerate(self.annot_info):
-            for inst_id in range(len(ann['instance_ids'])):
-                self.indexing.append((img_id, inst_id))
-        return len(self.indexing)
+    # def get_instance_length(self):
+    #     self.indexing = []
+    #     for ann in enumerate(self.annot_info):
+    #         self.indexing.append((int(ann['image_id']), int(ann['id'])))
+    #     return len(self.indexing)
 
-    def get_occlusion_length(self):
-        self.occ_all_img_and_idx = []
-        for img_id, ann in enumerate(self.annot_info):
-            for occ_idx in range(len(ann['occlusion'])):
-                self.occ_all_img_and_idx.append((img_id, occ_idx))
-        return len(self.occ_all_img_and_idx)
+    # def get_occlusion_length(self):
+    #     self.occ_all_img_and_idx = []
+    #     for img_id, ann in enumerate(self.annot_info):
+    #         for occ_idx in range(len(ann['occlusion'])):
+    #             self.occ_all_img_and_idx.append((img_id, occ_idx))
+    #     return len(self.occ_all_img_and_idx)
 
-    def get_geometric_length(self):
-        self.depth_all_img_and_order = []
-        for img_id, ann in enumerate(self.annot_info):
-            for g_overlap_count in ann['depth']:
-                self.depth_all_img_and_order.append((img_id, g_overlap_count['order']))
-        return len(self.depth_all_img_and_order)
+    # def get_geometric_length(self):
+    #     self.depth_all_img_and_order = []
+    #     for img_id, ann in enumerate(self.annot_info):
+    #         for g_overlap_count in ann['depth']:
+    #             self.depth_all_img_and_order.append((img_id, g_overlap_count['order']))
+    #     return len(self.depth_all_img_and_order)
 
-    def get_imgId_and_depth(self, depth_all_idx):
-        return self.depth_all_img_and_order[depth_all_idx]
+    # def get_imgId_and_depth(self, depth_all_idx):
+    #     return self.depth_all_img_and_order[depth_all_idx]
 
     def get_gt_ordering(self, imgidx, type, rm_bidirec=0, rm_overlap=0):
-        num = len(self.annot_info[imgidx]['instance_ids'])
+        img_info = self.coco.loadImgs(int(imgidx))[0]
 
         assert type in ["depth", "occlusion"], "order type should be ond of depth or occlusion"
         if type == "occlusion":
-            gt_occ_matrix = np.zeros((num, num), dtype=np.int)
-            occ_str = self.annot_info[imgidx]['occlusion']
-            if len(occ_str) == 0:
-                return gt_occ_matrix
+            gt_occ_matrix = np.array(img_info['rel_mat'])
+            # gt_occ_matrix = np.zeros((num, num), dtype=np.int)
+            # occ_str = self.annot_info[imgidx]['occlusion']
+            # if len(occ_str) == 0:
+            #     return gt_occ_matrix
 
-            for o in occ_str:
-                if "&" in o['order'] and rm_bidirec == 1:
-                    gt_occ_matrix[idx1, idx2] = -1
-                    gt_occ_matrix[idx2, idx1] = -1
+            # for o in occ_str:
+            #     if "&" in o['order'] and rm_bidirec == 1:
+            #         gt_occ_matrix[idx1, idx2] = -1
+            #         gt_occ_matrix[idx2, idx1] = -1
 
 
-                elif "&" in o['order']:
-                    idx1, idx2 = list(map(int, o['order'].split(' & ')[0].split('<')))
-                    gt_occ_matrix[idx1, idx2] = 1
-                    gt_occ_matrix[idx2, idx1] = 1
+            #     elif "&" in o['order']:
+            #         idx1, idx2 = list(map(int, o['order'].split(' & ')[0].split('<')))
+            #         gt_occ_matrix[idx1, idx2] = 1
+            #         gt_occ_matrix[idx2, idx1] = 1
 
-                else:
-                    idx1, idx2 = list(map(int, o['order'].split('<')))
-                    gt_occ_matrix[idx1, idx2] = 1
-            return gt_occ_matrix  # num x num
-
-        elif type == "depth":
-            gt_depth_matrix = np.ones((num, num), dtype=np.int) * (-1)
-            is_overlap_matrix = np.ones((num, num), dtype=np.int) * (-1)
-            count_matrix = np.ones((num, num), dtype=np.int) * (-1)
-
-            depth_str = self.annot_info[imgidx]['depth']
-
-            if len(depth_str) == 0:
-                return [gt_depth_matrix, is_overlap_matrix, count_matrix]
-
-            for overlap_count in depth_str:
-                depth_order = overlap_count['order']
-                is_overlap = overlap_count['overlap']
-                count = overlap_count['count']
-
-                split_char = "<" if "<" in depth_order else "="
-                idx1, idx2 = list(map(int, depth_order.split(split_char)))
-                if rm_overlap and is_overlap:
-                    is_overlap_matrix[idx1, idx2] = -1
-                    is_overlap_matrix[idx2, idx1] = -1
-
-                # set is_overlap_matrix
-                elif is_overlap:
-                    is_overlap_matrix[idx1, idx2] = 1
-                    is_overlap_matrix[idx2, idx1] = 1
-                else:
-                    is_overlap_matrix[idx1, idx2] = 0
-                    is_overlap_matrix[idx2, idx1] = 0
-
-                # set gt_depth_matrix
-                if split_char == "<":
-                    gt_depth_matrix[idx1, idx2] = 1
-                    gt_depth_matrix[idx2, idx1] = 0
-                elif split_char == "=":
-                    gt_depth_matrix[idx1, idx2] = 2
-                    gt_depth_matrix[idx2, idx1] = 2
-                # set count_matrix
-                count_matrix[idx1, idx2] = count
-                count_matrix[idx2, idx1] = count
-            return [gt_depth_matrix, is_overlap_matrix, count_matrix]  # num x num
+            #     else:
+            #         idx1, idx2 = list(map(int, o['order'].split('<')))
+            #         gt_occ_matrix[idx1, idx2] = 1
+            return -1 * gt_occ_matrix  # num x num
 
     def get_instance(self, idx, with_gt=False):
         # for PCNet-M
         imgidx, regidx = self.indexing[idx]
 
         # img
-        image_id = self.annot_info[imgidx]['image_id']
+        image_id = imgidx
         img_info = self.coco.loadImgs(image_id)[0]
         image_fn = img_info['file_name']
         w, h = img_info['width'], img_info['height']
 
         # region
-        annId = self.annot_info[imgidx]['instance_ids'][regidx]
+        annId = regidx
         ann = self.coco.loadAnns(annId)[0]
-        modal, bbox, category = read_LVIS(ann, h, w)
+        try:
+            modal, bbox, category, amodal = read_LVIS(ann, h, w)
+        except:
+            exit()
+            # print('*** ann ', ann)
         # reg = self.annot_info[imgidx]['regions'][regidx]
         # modal, bbox, category = read_COCOA(reg, h, w)
-        amodal = None
+        # amodal = None
         return modal, bbox, category, image_fn, amodal
 
+    def rle2mask(mask_rle: str, label=1, shape=(1200, 1200)):
+        """
+        mask_rle: run-length as string formatted (start length)
+        shape: (height,width) of array to return
+        Returns numpy array, 1 - mask, 0 - background
+
+        """
+        s = mask_rle.split()
+        starts, lengths = [np.asarray(x, dtype=int) for x in (s[0:][::2], s[1:][::2])]
+        starts -= 1
+        ends = starts + lengths
+        img = np.zeros(shape[0] * shape[1], dtype=np.uint8)
+        for lo, hi in zip(starts, ends):
+            img[lo:hi] = label
+        return img.reshape(shape)  # Needed to align to RLE direction
+
     def get_image_instances(self, idx, with_id=False, with_gt=False, with_anns=False, ignore_stuff=False):
-        ann_info = self.annot_info[idx]
-        # img
-        image_id = ann_info['image_id']
-        img_info = self.coco.loadImgs(image_id)[0]
+        # print('## idx', idx)
+        image_id = idx
+        img_info = self.coco.loadImgs(int(idx))[0]
         image_fn = img_info['file_name']
+        ann_info = []  # with_anns=False   # image_id, instances_id, occlusion, depth
+        rel_mat = -1 * np.array(img_info['rel_mat'])
+        
+
+        # ann_info = self.annot_info[idx]
+
+        # image_id = ann_info['image_id']
+        # img_info = self.coco.loadImgs(image_id)[0]
+        # image_fn = img_info['file_name']
         w, h = img_info['width'], img_info['height']
 
         ret_modal = []
         ret_bboxes = []
         ret_category = []
         ret_amodal = []
-        annIds = [int(annId) for annId in ann_info['instance_ids']]
+        annIds = [int(annId) for annId in img_info['instance_ids']]
 
         for annId in annIds:
             ann = self.coco.loadAnns(annId)[0]
-            modal, bbox, category = read_LVIS(ann, h, w)
+            modal, bbox, category, amodal = read_LVIS(ann, h, w)
             ret_modal.append(modal)
             ret_bboxes.append(bbox)
             ret_category.append(category)
+            ret_amodal.append(amodal)
             # if with_gt:
             #     amodal = maskUtils.decode(maskUtils.merge(
             #         maskUtils.frPyObjects([reg['segmentation']], h, w)))
             #     ret_amodal.append(amodal)
+
+        if len(ret_bboxes) != len(annIds):
+            print('### size error')
+            print(len(ret_bboxes))
+            print(len(annIds))
+            print(img_info)
+            exit()
 
         if with_anns and with_id:
             return np.array(ret_modal), np.array(ret_category), np.array(ret_bboxes), np.array(ret_amodal), \
@@ -454,7 +439,7 @@ class InstaOrderDataset(object):
                    image_fn, image_id
         else:
             return np.array(ret_modal), np.array(ret_category), np.array(ret_bboxes), np.array(ret_amodal), \
-                   image_fn
+                   image_fn, rel_mat
 
 
 class KINSLVISDataset(object):

@@ -136,7 +136,15 @@ class SupOcclusionOrderDataset(Dataset):
             return modal1, modal2, None
 
     def _get_pair(self, modal, bboxes, idx1, idx2, imgfn, load_rgb=False, randshift=False):
-        bbox = utils.combine_bbox(bboxes[(idx1, idx2), :])
+        # idx1, idx2 = idx1-1, idx2-1
+        try:
+            bbox = utils.combine_bbox(bboxes[(idx1, idx2), :])
+        except:
+            print('idx', idx1, idx2, len(bboxes))
+            print('*** [1]', bboxes)
+            print('*** [2]', idx1, idx2)
+            print('*** [3]', bboxes[(idx1, idx2), :])
+            print('*** [4]', utils.combine_bbox(bboxes[(idx1, idx2), :]))
         centerx = bbox[0] + bbox[2] / 2.
         centery = bbox[1] + bbox[3] / 2.
         size = max([np.sqrt(bbox[2] * bbox[3] * 2.), bbox[2] * 1.1, bbox[3] * 1.1])
@@ -180,16 +188,16 @@ class SupOcclusionOrderDataset(Dataset):
             return modal1, modal2, None
 
     def _get_pair_ind(self, idx):
-        modal, category, bboxes, amodal, image_fn = self.data_reader.get_image_instances(idx, with_gt=True)
+        modal, category, bboxes, amodal, image_fn, gt_occ_matrix = self.data_reader.get_image_instances(idx, with_gt=True)
         if self.config['use_category']:
             modal = modal * category[:, None, None]
 
-        if self.dataset == "KINS":
-            gt_occ_matrix = infer.infer_gt_order(modal, amodal)
-        elif self.dataset == 'InstaOrder':
-            gt_occ_matrix = self.data_reader.get_gt_ordering(idx, type="occlusion", rm_bidirec=self.rm_bidirec)
-        else:
-            gt_occ_matrix = self.data_reader.get_gt_ordering(idx)
+        # if self.dataset == "KINS":
+        #     gt_occ_matrix = infer.infer_gt_order(modal, amodal)
+        # elif self.dataset == 'InstaOrder':
+        #     gt_occ_matrix = self.data_reader.get_gt_ordering(idx, type="occlusion", rm_bidirec=self.rm_bidirec)
+        # else:
+        #     gt_occ_matrix = self.data_reader.get_gt_ordering(idx)
 
         np.fill_diagonal(gt_occ_matrix, -1)
         pairs = np.where(gt_occ_matrix == 1)
@@ -261,12 +269,15 @@ class SupOcclusionOrderDataset(Dataset):
                 idx1 = non_pairs[0][randidx]
                 idx2 = non_pairs[1][randidx]
 
+            if idx1 >= len(bboxes) or idx2 >= len(bboxes):
+                print('## index error: ', idx1, idx2, bboxes)
             modal1, modal2, rgb = self.get_pair_patch_or_image(
                 modal, bboxes, idx1, idx2, image_fn,
                 load_rgb=self.config['load_rgb'], randshift=True)
 
             a_over_b = gt_occ_matrix[idx1, idx2]
             b_over_a = gt_occ_matrix[idx2, idx1]
+            
 
             if rgb is None:
                 rgb = torch.zeros((3, self.sz, self.sz), dtype=torch.float32)  # 3HW

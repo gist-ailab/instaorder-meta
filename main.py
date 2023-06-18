@@ -9,15 +9,16 @@ warnings.filterwarnings("ignore", category=UserWarning)
 from utils import dist_init, dist_init_
 from trainer import Trainer
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 # os.environ["CUDA_VISIBLE_DEVICES"] = "4,5,6,7"
+os.environ['RANK'] = "0"
 
 def main(args):
-    with open(args.config) as f:
-        config = yaml.load(f)
+    with open(args.config, 'r') as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
 
     BASE_DIR = config['data']['base_dir']
-
     for k, v in config.items():
         for kkk, vvv in v.items():
             if type(vvv) == str and '/data/' in vvv:
@@ -45,7 +46,7 @@ def main(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='InstaOrder')
-    parser.add_argument('--config', required=True, type=str)
+    parser.add_argument('--config', type=str, default='/SSDb/heeseon/src/instaorder-meta/experiments/InstaOrder/InstaOrderNet_o/config.yaml')
     parser.add_argument('--launcher', default='pytorch', type=str)
     parser.add_argument('--load-iter', default=None, type=int)
     parser.add_argument('--load_pretrain', default=None, type=str)
