@@ -533,12 +533,39 @@ class InstaOrderNet_o(SingleStageModel):
             return loss_to_log
 
     def step(self):
+        import matplotlib.pyplot as plt
         if self.use_rgb:
             output1 = nn.functional.sigmoid(self.model(torch.cat([self.modal1, self.modal2, self.rgb], dim=1)))
             output2 = nn.functional.sigmoid(self.model(torch.cat([self.modal2, self.modal1, self.rgb], dim=1)))
         else:
             output1 = nn.functional.sigmoid(self.model(torch.cat([self.modal1, self.modal2], dim=1)))
             output2 = nn.functional.sigmoid(self.model(torch.cat([self.modal2, self.modal1], dim=1)))
+        
+
+        # if len(np.unique(self.occ_order1[0].cpu()))== 1:
+        #     print(self.modal1.shape, self.rgb.shape)
+        #     plt.axis('off')
+        #     img_idx = 'train_05'
+        #     plt.imshow(self.modal1[0][0].detach().cpu()); plt.savefig(f'/ailab_mat/personal/rho_heeseon/graduation/part1/{img_idx}_modal1.png', bbox_inches='tight', transparent=True, pad_inches=0);
+        #     plt.imshow(self.modal2[0][0].detach().cpu()); plt.savefig(f'/ailab_mat/personal/rho_heeseon/graduation/part1/{img_idx}_modal2.png', bbox_inches='tight', transparent=True, pad_inches=0);
+        #     plt.imshow(self.rgb[0].permute(1,2,0).detach().cpu()); plt.savefig(f'/ailab_mat/personal/rho_heeseon/graduation/part1/{img_idx}_image.png', bbox_inches='tight', transparent=True, pad_inches=0);
+
+        #     f = open(f'/ailab_mat/personal/rho_heeseon/graduation/part1/{img_idx}_rel_mat.txt', 'w')
+        #     f.write(f'gt_order:\norder1 {self.occ_order1[0]}\norder2 {self.occ_order2[0]}\n\n   \
+        #             predicted: \noutput1{output1[0]}\noutput2 {output2[0]} ')
+        #     f.close()
+
+        #     img_idx = 'train_06'
+        #     plt.imshow(self.modal1[1][0].detach().cpu()); plt.savefig(f'/ailab_mat/personal/rho_heeseon/graduation/part1/{img_idx}_modal1.png', bbox_inches='tight', transparent=True, pad_inches=0);
+        #     plt.imshow(self.modal2[1][0].detach().cpu()); plt.savefig(f'/ailab_mat/personal/rho_heeseon/graduation/part1/{img_idx}_modal2.png', bbox_inches='tight', transparent=True, pad_inches=0);
+        #     plt.imshow(self.rgb[1].permute(1,2,0).detach().cpu()); plt.savefig(f'/ailab_mat/personal/rho_heeseon/graduation/part1/{img_idx}_image.png', bbox_inches='tight', transparent=True, pad_inches=0);
+
+        #     f = open(f'/ailab_mat/personal/rho_heeseon/graduation/part1/{img_idx}_rel_mat.txt', 'w')
+        #     f.write(f'gt_order:\norder1 {self.occ_order1[1]}\norder2 {self.occ_order2[1]}\n\n   \
+        #             predicted: \noutput1{output1[1]}\noutput2 {output2[1]} ')
+        #     f.close()
+
+        #     exit()
 
         loss = (self.criterion(output1, self.occ_order1) + self.criterion(output2, self.occ_order2)) / self.world_size
         self.optim.zero_grad()
